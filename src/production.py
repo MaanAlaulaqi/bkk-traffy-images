@@ -232,10 +232,11 @@ def main():
         if next(iterator, None) is None:
             raise ValueError('Checkpoint exceeds source row count')
     print(f'Resuming at ticket row {offset}', flush=True)
+    effective_batch_size = args.batch_size
     for count in itertools.count(1):
         if args.max_batches and count > args.max_batches:
             break
-        input_rows = list(itertools.islice(iterator, args.batch_size))
+        input_rows = list(itertools.islice(iterator, effective_batch_size))
         if not input_rows:
             print('All source rows processed. Inspect failure logs for missing images.', flush=True)
             break
@@ -246,6 +247,7 @@ def main():
             raise ValueError('Less than 2 GB local disk space available; stopping before batch')
         work.mkdir(exist_ok=False)
         input_rows, iterator, output, failures = fit_batch(input_rows, iterator, args.workers, args.timeout, args.attempts, args.max_batch_mb * 1_000_000)
+        effective_batch_size = min(effective_batch_size, len(input_rows))
         transient_failures = sum(bool(f.get('transient')) for f in failures)
         task_count = sum(bool(row[field].strip()) for row in input_rows for field in ('photo', 'photo_after'))
         if transient_failures:
