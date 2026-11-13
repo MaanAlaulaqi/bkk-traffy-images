@@ -25,6 +25,10 @@ CHECKPOINT = 'checkpoints/production.json'
 IMAGE_COLS = ('image_before', 'image_after')
 
 
+class BatchTooLarge(ValueError):
+    pass
+
+
 def inspect_sources(folder):
     files = sorted(Path(folder).glob('bangkok_*.csv'))
     if not files:
@@ -149,11 +153,26 @@ def make_batch(input_rows, workers, timeout, attempts, max_bytes):
                 else:
                     total += len(content)
                     if total > max_bytes:
-                        raise ValueError('Batch exceeds --max-batch-mb; reduce --batch-size and retry')
+                        raise BatchTooLarge('Batch exceeds --max-batch-mb')
                     output[index][col] = {'bytes': content, 'path': None}
                 print(f'Downloads {done_count}/{len(tasks)}; failures {len(failures)}', flush=True)
                 submit_next()
     return output, failures
+
+
+def fit_batch(input_rows, iterator, workers, timeout, attempts, max_bytes):
+    """Split oversized batches without advancing or dropping any source rows."""
+    while True:
+        try:
+            output, failures = make_batch(input_rows, workers, timeout, attempts, max_bytes)
+            return input_rows, iterator, output, failures
+        except BatchTooLarge:
+            if len(input_rows) <= 1:
+                raise
+            split = len(input_rows) // 2
+            iterator = itertools.chain(input_rows[split:], iterator)
+            input_rows = input_rows[:split]
+            print(f'Batch exceeds image size limit; retrying with {len(input_rows)} tickets and deferring the remainder', flush=True)
 
 
 def get_checkpoint(repo, revision, tmp):
@@ -226,7 +245,7 @@ def main():
         if shutil.disk_usage(args.work_dir).free < 2_000_000_000:
             raise ValueError('Less than 2 GB local disk space available; stopping before batch')
         work.mkdir(exist_ok=False)
-        output, failures = make_batch(input_rows, args.workers, args.timeout, args.attempts, args.max_batch_mb * 1_000_000)
+        input_rows, iterator, output, failures = fit_batch(input_rows, iterator, args.workers, args.timeout, args.attempts, args.max_batch_mb * 1_000_000)
         transient_failures = sum(bool(f.get('transient')) for f in failures)
         task_count = sum(bool(row[field].strip()) for row in input_rows for field in ('photo', 'photo_after'))
         if transient_failures:

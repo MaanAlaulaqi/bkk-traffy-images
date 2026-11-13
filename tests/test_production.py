@@ -25,6 +25,19 @@ class ProductionTest(unittest.TestCase):
         self.assertEqual(failures[0]['ticket_id'], 'T')
         self.assertEqual(failures[0]['field'], 'photo_after')
 
+    def test_oversized_batch_splits_without_losing_rows(self):
+        original = list(range(8))
+        def fake(batch, *args):
+            if len(batch) > 2:
+                raise production.BatchTooLarge('too big')
+            return batch, []
+        with patch('production.make_batch', side_effect=fake):
+            chosen, rest, output, failures = production.fit_batch(original, iter([8, 9]), 1, 15, 3, 100)
+        self.assertEqual(chosen, [0, 1])
+        self.assertEqual(output, [0, 1])
+        self.assertEqual(list(rest), list(range(2, 10)))
+        self.assertEqual(failures, [])
+
     def test_source_schema_validation(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'bangkok_test.csv'
