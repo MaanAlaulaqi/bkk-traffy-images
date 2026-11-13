@@ -28,7 +28,7 @@ def snapshot(path):
                 pass
         if line.startswith('Downloads '):
             phase = line
-        elif line.startswith(('Uploading shard ', 'Resuming at ', 'Verified ', 'Transient failure;', 'Transient outage:', 'Stopped:', 'All source rows processed.', 'Transient I/O error:')):
+        elif line.startswith(('Uploading shard ', 'Uploading queued batch ', 'Queued batch ', 'Queue waiting for space:', 'Resuming at ', 'Verified ', 'Transient failure;', 'Transient outage:', 'Stopped:', 'All source rows processed.', 'Transient I/O error:')):
             phase = line
         elif 'supervisor exit code=' in line:
             phase = line
@@ -54,6 +54,16 @@ def view(log, total):
                       f'Last batch:        {progress.get("batch", "unknown")}'])
     else:
         lines.append('No verified batch progress found in recent log.')
+    queue = log.parent / 'pipeline-queue'
+    if queue.exists():
+        total_bytes = 0
+        for path in queue.rglob('*'):
+            try:
+                if path.is_file():
+                    total_bytes += path.stat().st_size
+            except FileNotFoundError:
+                pass
+        lines.append(f'Local queue:       {total_bytes / 1e9:.3f} GB (200 GB target)')
     lines.extend(['', 'Current activity:', phase, '', 'Refreshes every 2 seconds. Press Ctrl+C to close; upload continues.'])
     return '\n'.join(lines)
 

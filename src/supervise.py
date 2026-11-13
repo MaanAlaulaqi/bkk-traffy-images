@@ -23,6 +23,8 @@ def main():
     p.add_argument('--max-upload-gb', type=float, default=900)
     p.add_argument('--max-batch-mb', type=int, default=1042)
     p.add_argument('--retries', type=int, default=5)
+    p.add_argument('--pipeline', action=argparse.BooleanOptionalAction, default=True, help='Use overlapping download/upload queue (default: enabled)')
+    p.add_argument('--queue-limit-gb', type=float, default=200)
     args = p.parse_args()
     args.work_dir.mkdir(parents=True, exist_ok=True)
     lock = (args.work_dir / 'supervisor.lock').open('w')
@@ -31,8 +33,11 @@ def main():
     except BlockingIOError:
         raise SystemExit('Another uploader is already running in this work directory')
     log_path = args.work_dir / 'production.log'
-    script = Path(__file__).with_name('production.py')
-    cmd = [sys.executable, '-u', str(script), '--csv-dir', args.csv_dir, '--repo', args.repo, '--revision', args.revision, '--work-dir', str(args.work_dir / 'batches'), '--batch-size', str(args.batch_size), '--workers', str(args.workers), '--max-batches', str(args.max_batches), '--max-upload-gb', str(args.max_upload_gb), '--max-batch-mb', str(args.max_batch_mb)]
+    script = Path(__file__).with_name('pipeline.py' if args.pipeline else 'production.py')
+    child_work = args.work_dir if args.pipeline else args.work_dir / 'batches'
+    cmd = [sys.executable, '-u', str(script), '--csv-dir', args.csv_dir, '--repo', args.repo, '--revision', args.revision, '--work-dir', str(child_work), '--batch-size', str(args.batch_size), '--workers', str(args.workers), '--max-batches', str(args.max_batches), '--max-upload-gb', str(args.max_upload_gb), '--max-batch-mb', str(args.max_batch_mb)]
+    if args.pipeline:
+        cmd += ['--queue-limit-gb', str(args.queue_limit_gb), '--inherited-lock-fd', str(lock.fileno())]
     child = None
     stopping = False
     def stop(signum, frame):
@@ -48,7 +53,7 @@ def main():
             log.write(line + '\n')
         for attempt in range(args.retries + 1):
             emit(f'{datetime.datetime.now(datetime.timezone.utc).isoformat()} supervisor start attempt={attempt + 1}')
-            child = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            child = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, pass_fds=(lock.fileno(),) if args.pipeline else ())
             for line in child.stdout:
                 emit(line.rstrip('\n'))
             code = child.wait()
