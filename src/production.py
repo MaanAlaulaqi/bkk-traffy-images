@@ -10,12 +10,15 @@ import shutil
 import time
 import uuid
 import urllib.parse
+import urllib.error
+import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from PIL import Image as PILImage
 from datasets import Dataset, Features, Image, Value
 from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError
+from httpx import RequestError
 from pilot import sha256
 
 CHECKPOINT = 'checkpoints/production.json'
@@ -77,7 +80,8 @@ def download(item, timeout, attempts):
             return {**item, 'status': 'ok', 'content_type': kind, 'attempts': attempt + 1}, data
         except Exception as exc:
             if attempt + 1 == attempts:
-                return {**item, 'status': 'failed', 'error_type': type(exc).__name__, 'error': str(exc), 'attempts': attempt + 1}, None
+                transient = isinstance(exc, (TimeoutError, ConnectionError, urllib.error.URLError)) and (not isinstance(exc, urllib.error.HTTPError) or exc.code == 429 or exc.code >= 500)
+                return {**item, 'status': 'failed', 'error_type': type(exc).__name__, 'error': str(exc), 'attempts': attempt + 1, 'transient': transient}, None
             time.sleep(2 ** attempt)
 
 
@@ -166,8 +170,9 @@ def main():
     p.add_argument('--attempts', type=int, default=3)
     p.add_argument('--max-batch-mb', type=int, default=256)
     p.add_argument('--max-batches', type=int, default=1, help='0 processes all rows')
+    p.add_argument('--max-upload-gb', type=float, default=900, help='Stop before total committed shard bytes exceed this many decimal GB')
     args = p.parse_args()
-    if not 1 <= args.batch_size <= 500 or not 1 <= args.workers <= 16 or not 0 < args.timeout <= 120 or not 1 <= args.attempts <= 10 or not 1 <= args.max_batch_mb <= 1024 or args.max_batches < 0:
+    if not 1 <= args.batch_size <= 500 or not 1 <= args.workers <= 16 or not 0 < args.timeout <= 120 or not 1 <= args.attempts <= 10 or not 1 <= args.max_batch_mb <= 1024 or args.max_batches < 0 or args.max_upload_gb <= 0:
         p.error('Invalid batch size, worker count, timeout, attempts, memory limit or batch count')
     api = HfApi()
     args.work_dir.mkdir(parents=True, exist_ok=True)
@@ -183,6 +188,9 @@ def main():
     if checkpoint is None and any(path.startswith(('data/', 'manifests/', 'failures/')) for path in api.list_repo_files(args.repo, repo_type='dataset', revision=head)):
         raise ValueError('No production checkpoint, but data files already exist; refusing to start')
     offset = checkpoint['next_row'] if checkpoint else 0
+    uploaded_bytes = checkpoint.get('uploaded_bytes', 0) if checkpoint else 0
+    total_failed = checkpoint.get('total_failed', 0) if checkpoint else 0
+    total_images = checkpoint.get('total_images', 0) if checkpoint else 0
     iterator = rows(args.csv_dir, source)
     for _ in range(offset):
         if next(iterator, None) is None:
@@ -198,8 +206,16 @@ def main():
         epoch = int(time.time())
         batch = f'{epoch}-{uuid.uuid4().hex[:8]}'
         work = args.work_dir / batch
+        if shutil.disk_usage(args.work_dir).free < 2_000_000_000:
+            raise ValueError('Less than 2 GB local disk space available; stopping before batch')
         work.mkdir(exist_ok=False)
         output, failures = make_batch(input_rows, args.workers, args.timeout, args.attempts, args.max_batch_mb * 1_000_000)
+        transient_failures = sum(bool(f.get('transient')) for f in failures)
+        task_count = sum(bool(row[field].strip()) for row in input_rows for field in ('photo', 'photo_after'))
+        if transient_failures:
+            (work / 'failures.json').write_text(json.dumps(failures, ensure_ascii=False, indent=2), encoding='utf-8')
+            print(f'Transient outage: {transient_failures}/{task_count} downloads failed; checkpoint unchanged', flush=True)
+            return 75
         shard = work / 'batch.parquet'
         Dataset.from_list(output, features=create_features(header)).to_parquet(str(shard), batch_size=50)
         # Rehash to detect changes while this batch was being read or processed.
@@ -208,7 +224,11 @@ def main():
         group = f'{offset // 50000:04d}'
         shard_path = f'data/{group}/train-{offset:09d}-{batch}.parquet'
         failure_path = f'failures/{group}/{batch}.jsonl'
-        state = {'version': 2, 'batch': batch, 'start_row': offset, 'next_row': offset + len(input_rows), 'shard': shard_path, 'sha256': sha256(shard), 'source_files': source, 'header': header, 'failure_count': len(failures), 'failure_log': failure_path if failures else None}
+        shard_size = shard.stat().st_size
+        if uploaded_bytes + shard_size > args.max_upload_gb * 1_000_000_000:
+            raise ValueError('Configured upload size limit reached; checkpoint unchanged')
+        success_count = sum(1 for row in output for col in IMAGE_COLS if row[col] is not None)
+        state = {'version': 2, 'batch': batch, 'start_row': offset, 'next_row': offset + len(input_rows), 'shard': shard_path, 'sha256': sha256(shard), 'source_files': source, 'header': header, 'failure_count': len(failures), 'failure_log': failure_path if failures else None, 'shard_bytes': shard_size, 'uploaded_bytes': uploaded_bytes + shard_size, 'total_failed': total_failed + len(failures), 'total_images': total_images + success_count}
         manifest = {k:v for k,v in state.items() if k not in ('source_files', 'header')}
         def encode(x): return json.dumps(x, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         (work / 'checkpoint.json').write_bytes(encode(state))
@@ -222,9 +242,15 @@ def main():
         print('Uploading shard 1/1; verifying remote checksum', flush=True)
         verify_shard(args.repo, head, state, work / 'verify')
         offset = state['next_row']
+        uploaded_bytes, total_failed, total_images = state['uploaded_bytes'], state['total_failed'], state['total_images']
+        print('PROGRESS ' + json.dumps({'rows': offset, 'images': total_images, 'failed_images': total_failed, 'shard_bytes': uploaded_bytes, 'batch': batch}), flush=True)
         shutil.rmtree(work)
         print(f'Verified {batch}; next row {offset}; failures {len(failures)}', flush=True)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        sys.exit(main())
+    except (ConnectionError, TimeoutError, OSError, RequestError) as exc:
+        print(f'Transient I/O error: {type(exc).__name__}: {exc}', file=sys.stderr, flush=True)
+        sys.exit(75)
