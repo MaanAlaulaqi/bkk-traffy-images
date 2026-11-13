@@ -2,3 +2,8 @@ __pycache__/
 *.py[cod]
 .pilot-work/
 .upload-work/
+*.pyc
+.resume-test-*/
+.failure-test-*/
+.final-test-*/
+.parquet-test-*/

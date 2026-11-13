@@ -1,0 +1,4 @@
+datasets>=4.8,<5
+pyarrow>=19,<25
+pillow>=11,<13
+huggingface-hub>=1.33,<2
