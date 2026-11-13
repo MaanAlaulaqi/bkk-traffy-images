@@ -44,21 +44,21 @@ def sample_links(directory, limit, seed):
     return sample, total
 
 
-def download(item):
-    for attempt in range(3):
+def download(item, timeout=15, attempts=3):
+    for attempt in range(attempts):
         try:
             request = urllib.request.Request(item['url'], headers={'User-Agent': 'bkk-traffy-image-pilot/1.0'})
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 data = response.read(MAX_BYTES + 1)
                 content_type = response.headers.get_content_type()
             if len(data) > MAX_BYTES:
                 raise ValueError('image exceeds 20 MB')
             if not content_type.startswith('image/'):
                 raise ValueError('unexpected content type: ' + content_type)
-            return {**item, 'status': 'ok', 'content_type': content_type, 'sha256': hashlib.sha256(data).hexdigest()}, data
+            return {**item, 'status': 'ok', 'content_type': content_type, 'sha256': hashlib.sha256(data).hexdigest(), 'attempts': attempt + 1}, data
         except Exception as exc:
-            if attempt == 2:
-                return {**item, 'status': 'failed', 'error': str(exc)}, None
+            if attempt == attempts - 1:
+                return {**item, 'status': 'failed', 'error': str(exc), 'error_type': type(exc).__name__, 'attempts': attempt + 1}, None
             time.sleep(2 ** attempt)
 
 

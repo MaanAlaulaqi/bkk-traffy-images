@@ -66,10 +66,12 @@ def main():
     p.add_argument('--work-dir', type=Path, required=True)
     p.add_argument('--batch-size', type=int, default=100)
     p.add_argument('--workers', type=int, default=6)
+    p.add_argument('--timeout', type=float, default=15, help='Network timeout in seconds per attempt')
+    p.add_argument('--attempts', type=int, default=3, help='Download attempts per URL')
     p.add_argument('--max-batches', type=int, default=0, help='0 means no limit')
     args = p.parse_args()
-    if not 1 <= args.batch_size <= 1000 or not 1 <= args.workers <= 16 or args.max_batches < 0:
-        p.error('batch size must be 1–1000, workers 1–16 and max-batches nonnegative')
+    if not 1 <= args.batch_size <= 1000 or not 1 <= args.workers <= 16 or args.max_batches < 0 or not 0 < args.timeout <= 120 or not 1 <= args.attempts <= 10:
+        p.error('Invalid batch size, worker count, max-batches, timeout or attempts')
     from huggingface_hub import HfApi, CommitOperationAdd
     api = HfApi()
     args.work_dir.mkdir(parents=True, exist_ok=True)
@@ -96,15 +98,11 @@ def main():
         directory.mkdir(exist_ok=False)
         results = [None] * len(batch)
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            futures = {pool.submit(download, item): i for i, item in enumerate(batch)}
+            futures = {pool.submit(download, item, args.timeout, args.attempts): i for i, item in enumerate(batch)}
             for done, f in enumerate(as_completed(futures), 1):
                 results[futures[f]] = f.result()
                 ok = sum(x is not None and x[1] is not None for x in results)
                 print(f'Batch {batch_id}: downloaded {done}/{len(batch)} (ok={ok}, failed={done-ok})', flush=True)
-        failures = [r for r, data in results if data is None]
-        if failures:
-            (directory / 'failures.json').write_text(json.dumps(failures, ensure_ascii=False, indent=2), encoding='utf-8')
-            raise RuntimeError(f'{len(failures)} downloads failed; checkpoint unchanged; details in {directory}')
         archive = directory / 'batch.tar'
         records = build_archive(archive, results)
         archive_path = f'data/{batch_id}.tar'
@@ -116,7 +114,11 @@ def main():
             return json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         (directory / 'manifest.json').write_bytes(encoded(manifest))
         (directory / 'checkpoint.json').write_bytes(encoded(checkpoint))
+        failures = [r for r in records if r['status'] == 'failed']
         ops = [CommitOperationAdd(path_in_repo=archive_path, path_or_fileobj=str(archive)), CommitOperationAdd(path_in_repo=manifest_path, path_or_fileobj=encoded(manifest)), CommitOperationAdd(path_in_repo=CHECKPOINT, path_or_fileobj=encoded(checkpoint))]
+        if failures:
+            failure_log = ''.join(json.dumps(record, ensure_ascii=False) + '\n' for record in failures).encode('utf-8')
+            ops.append(CommitOperationAdd(path_in_repo=f'failures/{batch_id}.jsonl', path_or_fileobj=failure_log))
         print(f'Uploading archive 0/1; {len(batch)} links in batch; byte progress follows', flush=True)
         result = api.create_commit(repo_id=args.repo, repo_type='dataset', revision=args.revision, parent_commit=remote_head, operations=ops, commit_message=f'images epoch={epoch} batch={batch_id} next={checkpoint["next_index"]}')
         remote_head = result.oid
