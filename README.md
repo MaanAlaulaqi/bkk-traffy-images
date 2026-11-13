@@ -45,3 +45,9 @@ The sample suggests hundreds of GB; actual size, quota, public storage terms and
 Run `src/supervise.py` with the same `--csv-dir`, `--repo`, `--revision` and `--work-dir` options as the uploader. It writes a persistent `production.log`, prevents two supervisors using the same work directory, and retries transient errors up to five times with backoff. `--max-batches 0` processes all rows; the default is one batch. `--max-upload-gb` sets a cap on shard bytes recorded by this pipeline (default 900 decimal GB), not total account usage. The log's `PROGRESS` JSON lines include ticket rows, successful images, failed images and uploaded shard bytes. A temporary network download failure stops the current batch without advancing its checkpoint, to avoid logging every image as permanently missing.
 
 The supervisor runs only while its process remains alive; sleep pauses it, and a shutdown or process termination requires starting it again. It does not restart itself after reboot. When stopping it with Ctrl-C, rerun the command to resume. A batch in progress may need to be downloaded again; incomplete local files are retained in the work directory. The retry limit and permanent errors stop the run for inspection. Storage already used by other repositories and remote cache are outside the byte cap.
+
+## Live status
+
+Run `~/.venvs/bkk-huggingface/bin/python src/status.py` from the project directory for a compact view that refreshes in place. Press Ctrl+C to exit the view without stopping the uploader. Add `--once` for one snapshot. The ticket total is an approximate count from the original CSV collection; the storage number is only the shard bytes recorded by this pipeline, not total account usage. The full detailed log remains at `.upload-work/production.log`.
+
+Dataset batch commits are on the Hugging Face dataset repository; GitHub commits record changes to this project's code and documentation. They are separate Git histories.
