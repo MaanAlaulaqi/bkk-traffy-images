@@ -20,7 +20,7 @@ Repeat the same command to resume; `--max-batches 0` continues until all source 
 
 Defaults: 200 ticket rows per batch, 6 workers, 3 attempts, 15-second network timeout and a 256 MB batch image-byte limit. Tune with `--batch-size`, `--workers`, `--attempts`, `--timeout`, and `--max-batch-mb`. The byte limit excludes active downloads and serialization copies and is not a hard process memory limit; reduce batch size and workers if memory is constrained. The script restricts image downloads to the original public Traffy storage bucket and does not follow redirects. If a limit is exceeded, the batch stops without advancing the checkpoint. Timeouts apply to blocking network operations rather than a strict total deadline.
 
-Failed image downloads are recorded in `failures/<group>/<batch>.jsonl`, and corresponding Parquet image values are null with status `failed`. Missing URLs have status `no_url`. Normal resume moves past failures; it does not automatically retry or backfill them. Audit failures before treating the dataset as complete. Keep inputs unchanged throughout a run; they are rehashed before each batch commit, which costs extra disk I/O.
+Failed image downloads are recorded in `failures/<group>/<batch>.jsonl`, and corresponding Parquet image values are null with status `failed`. Missing URLs have status `no_url`. Normal resume moves past failures; it does not automatically retry or backfill them. Audit failures before treating the dataset as complete. Keep inputs unchanged throughout a run; each file is hashed at startup and its size, inode and timestamps are checked before each commit. The script also checks for changes while hashing. Deliberate filesystem metadata manipulation is not fully guarded against.
 
 ## Audit and consume
 

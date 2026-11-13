@@ -46,6 +46,18 @@ def inspect_sources(folder):
     return signatures, header
 
 
+def source_file_stats(folder, source):
+    result = []
+    for entry in source:
+        path = Path(folder) / entry['name']
+        stat = path.stat()
+        result.append((entry['name'], stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
+    actual = sorted(p.name for p in Path(folder).glob('bangkok_*.csv'))
+    if actual != [entry['name'] for entry in source]:
+        raise ValueError('Source file list changed')
+    return result
+
+
 def rows(folder, source):
     for file in source:
         path = Path(folder) / file['name']
@@ -176,7 +188,12 @@ def main():
         p.error('Invalid batch size, worker count, timeout, attempts, memory limit or batch count')
     api = HfApi()
     args.work_dir.mkdir(parents=True, exist_ok=True)
+    initial_files = [{'name': p.name} for p in sorted(args.csv_dir.glob('bangkok_*.csv'))]
+    initial_stats = source_file_stats(args.csv_dir, initial_files)
     source, header = inspect_sources(args.csv_dir)
+    source_stats = source_file_stats(args.csv_dir, source)
+    if source_stats != initial_stats:
+        raise ValueError('Source files changed while hashing; try again')
     head = api.repo_info(args.repo, repo_type='dataset', revision=args.revision).sha
     tmp = args.work_dir / ('verify-' + uuid.uuid4().hex)
     checkpoint = get_checkpoint(args.repo, head, tmp)
@@ -218,8 +235,8 @@ def main():
             return 75
         shard = work / 'batch.parquet'
         Dataset.from_list(output, features=create_features(header)).to_parquet(str(shard), batch_size=50)
-        # Rehash to detect changes while this batch was being read or processed.
-        if inspect_sources(args.csv_dir)[0] != source:
+        # Detect local modifications without rereading every multi-GB CSV for each batch.
+        if source_file_stats(args.csv_dir, source) != source_stats:
             raise ValueError('Source files changed during batch; no commit created')
         group = f'{offset // 50000:04d}'
         shard_path = f'data/{group}/train-{offset:09d}-{batch}.parquet'
