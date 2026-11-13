@@ -13,7 +13,7 @@ import tarfile
 import time
 import urllib.request
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 FIELDS = ('photo', 'photo_after')
 MAX_BYTES = 20_000_000
@@ -117,8 +117,13 @@ def main():
         original = a.dataset_info(args.repo).sha
         sample, population = sample_links(args.csv_dir, args.count, args.seed)
         print(f'{run_id}: selected {len(sample)} of {population} URLs', flush=True)
+        results = [None] * len(sample)
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            results = list(pool.map(download, sample))
+            futures = {pool.submit(download, item): i for i, item in enumerate(sample)}
+            for completed, future in enumerate(as_completed(futures), 1):
+                results[futures[future]] = future.result()
+                ok = sum(result is not None and result[1] is not None for result in results)
+                print(f'Downloaded {completed}/{len(sample)} links (successful: {ok}, failed: {completed - ok})', flush=True)
         successes = sum(data is not None for _, data in results)
         print(f'{run_id}: downloaded {successes}; failed {len(results) - successes}', flush=True)
         if not successes:
@@ -128,7 +133,9 @@ def main():
         digest = sha256(archive)
         a.create_branch(args.repo, branch=branch, repo_type='dataset', revision=original)
         created = True
+        print('Uploading archive 0/1 (contains ' + str(successes) + ' images); byte progress follows', flush=True)
         a.upload_file(path_or_fileobj=archive, path_in_repo='pilot/pilot.tar', repo_id=args.repo, repo_type='dataset', revision=branch, commit_message=f'pilot epoch={run_id.split("-")[0]} batch={run_id}')
+        print('Uploaded archive 1/1; verifying download', flush=True)
         remote = hf_hub_download(repo_id=args.repo, repo_type='dataset', revision=branch, filename='pilot/pilot.tar', local_dir=work / 'verify', force_download=True)
         if sha256(remote) != digest:
             raise RuntimeError('Downloaded archive checksum mismatch')

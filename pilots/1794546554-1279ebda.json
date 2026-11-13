@@ -1,0 +1,16 @@
+{
+  "batch": "1794546554-1279ebda",
+  "selected": 200,
+  "population": 2578719,
+  "success": 200,
+  "failed": 0,
+  "archive_bytes": 66273280,
+  "image_bytes": 66031647,
+  "sha256": "6417a1945cdd60b31665d47cbca5697c7abd8fd34ef7888aa7be54351d17e852",
+  "elapsed_seconds": 180.0,
+  "remote_verified": true,
+  "temporary_branch_removed": true,
+  "local_files_removed": true,
+  "main_revision_unchanged": true,
+  "sampling": "reservoir sample of URL occurrences, seed 20261113"
+}
