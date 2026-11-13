@@ -21,6 +21,7 @@ def main():
     p.add_argument('--workers', type=int, default=24)
     p.add_argument('--max-batches', type=int, default=1)
     p.add_argument('--max-upload-gb', type=float, default=900)
+    p.add_argument('--max-batch-mb', type=int, default=1042)
     p.add_argument('--retries', type=int, default=5)
     args = p.parse_args()
     args.work_dir.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,7 @@ def main():
         raise SystemExit('Another uploader is already running in this work directory')
     log_path = args.work_dir / 'production.log'
     script = Path(__file__).with_name('production.py')
-    cmd = [sys.executable, '-u', str(script), '--csv-dir', args.csv_dir, '--repo', args.repo, '--revision', args.revision, '--work-dir', str(args.work_dir / 'batches'), '--batch-size', str(args.batch_size), '--workers', str(args.workers), '--max-batches', str(args.max_batches), '--max-upload-gb', str(args.max_upload_gb)]
+    cmd = [sys.executable, '-u', str(script), '--csv-dir', args.csv_dir, '--repo', args.repo, '--revision', args.revision, '--work-dir', str(args.work_dir / 'batches'), '--batch-size', str(args.batch_size), '--workers', str(args.workers), '--max-batches', str(args.max_batches), '--max-upload-gb', str(args.max_upload_gb), '--max-batch-mb', str(args.max_batch_mb)]
     child = None
     stopping = False
     def stop(signum, frame):

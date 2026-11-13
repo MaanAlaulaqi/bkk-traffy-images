@@ -203,7 +203,7 @@ def main():
     p.add_argument('--max-batches', type=int, default=1, help='0 processes all rows')
     p.add_argument('--max-upload-gb', type=float, default=900, help='Stop before total committed shard bytes exceed this many decimal GB')
     args = p.parse_args()
-    if not 1 <= args.batch_size <= 500 or not 1 <= args.workers <= 32 or not 0 < args.timeout <= 120 or not 1 <= args.attempts <= 10 or not 1 <= args.max_batch_mb <= 1024 or args.max_batches < 0 or args.max_upload_gb <= 0:
+    if not 1 <= args.batch_size <= 500 or not 1 <= args.workers <= 32 or not 0 < args.timeout <= 120 or not 1 <= args.attempts <= 10 or not 1 <= args.max_batch_mb <= 2048 or args.max_batches < 0 or args.max_upload_gb <= 0:
         p.error('Invalid batch size, worker count, timeout, attempts, memory limit or batch count')
     api = HfApi()
     args.work_dir.mkdir(parents=True, exist_ok=True)
