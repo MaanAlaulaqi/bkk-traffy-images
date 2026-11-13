@@ -1,0 +1,17 @@
+{
+  "batch": "1794605646-1eb241b1",
+  "start_row": 72400,
+  "next_row": 72600,
+  "shard": "data/0001/train-000072400-1794605646-1eb241b1.parquet",
+  "sha256": "6bc4c8902693157198230e48c886518a160f572531777d6e41a58d558a4ac663",
+  "failure_count": 0,
+  "failure_log": null,
+  "shard_bytes": 147132910,
+  "uploaded_bytes": 61052618117,
+  "total_failed": 37,
+  "total_images": 123311,
+  "epoch": 1794605646,
+  "huggingface_commit": "c688e72f1af3add8545e3d6b5954eb2dba3e3cc7",
+  "huggingface_repository": "rocketrat/bkk-traffy-images",
+  "huggingface_commit_url": "https://huggingface.co/datasets/rocketrat/bkk-traffy-images/commit/c688e72f1af3add8545e3d6b5954eb2dba3e3cc7"
+}
