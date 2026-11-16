@@ -50,7 +50,7 @@ def view(log, total):
         lines.extend([f'Tickets committed: {rows:,}' + (f' / {total:,}' if total else '') + pct,
                       f'Images saved:      {progress.get("images", 0):,}',
                       f'Images failed:     {progress.get("failed_images", 0):,}',
-                      f'Shard data:        {progress.get("shard_bytes", 0) / 1e9:.3f} GB (900 GB pipeline cap)',
+                      f'Shard data:        {progress.get("shard_bytes", 0) / 1e9:.3f} GB (950 GB pipeline cap)',
                       f'Last batch:        {progress.get("batch", "unknown")}'])
     else:
         lines.append('No verified batch progress found in recent log.')

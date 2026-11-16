@@ -20,7 +20,7 @@ def main():
     p.add_argument('--batch-size', type=int, default=100)
     p.add_argument('--workers', type=int, default=24)
     p.add_argument('--max-batches', type=int, default=1)
-    p.add_argument('--max-upload-gb', type=float, default=900)
+    p.add_argument('--max-upload-gb', type=float, default=950)
     p.add_argument('--max-batch-mb', type=int, default=1042)
     p.add_argument('--retries', type=int, default=5)
     p.add_argument('--pipeline', action=argparse.BooleanOptionalAction, default=True, help='Use overlapping download/upload queue (default: enabled)')
