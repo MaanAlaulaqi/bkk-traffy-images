@@ -72,7 +72,7 @@ def main():
     parser.add_argument('--timeout', type=float, default=15)
     parser.add_argument('--attempts', type=int, default=3)
     parser.add_argument('--max-batch-mb', type=int, default=1042)
-    parser.add_argument('--max-upload-gb', type=float, default=900)
+    parser.add_argument('--max-upload-gb', type=float, default=1400)
     parser.add_argument('--max-batches', type=int, default=0)
     parser.add_argument('--inherited-lock-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
