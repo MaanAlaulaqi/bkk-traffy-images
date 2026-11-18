@@ -111,6 +111,24 @@ Loading a private dataset requires an authenticated Hugging Face session. Stream
 - Avoid leakage: split before fitting preprocessing or building a retrieval index, keep duplicate or related tickets and translated versions together, and restrict retrieval to material legitimately available at prediction time. An image taken after resolution is not a submission-time input.
 - This collection primarily reflects Bangkok and Thai-language reporting. It does not establish performance in other languages, cities or jurisdictions.
 
+## Citation
+
+If you use this derived dataset, cite the exact dataset revision used. The following is a provisional citation for the frozen snapshot documented above; replace the revision with the one used in your work. `rocketrat` is the dataset maintainer's Hugging Face handle, not a claim about the creators of the original reports:
+
+```bibtex
+@misc{rocketrat_bangkok_traffy_images_2026,
+  author       = {{rocketrat}},
+  title        = {Bangkok Traffy Fondue Civic Reports with Images},
+  year         = {2026},
+  publisher    = {Hugging Face},
+  version      = {0e309689ad57bedccd5ff5ae95f2b2a4a9f98f8d},
+  url          = {https://huggingface.co/datasets/rocketrat/bkk-traffy-images/tree/0e309689ad57bedccd5ff5ae95f2b2a4a9f98f8d},
+  note         = {Derived dataset; source: Traffy x Bangkok}
+}
+```
+
+Also acknowledge the original [Traffy x Bangkok](https://bangkok.traffy.in.th/) source separately and follow any attribution requirements established by its rights holders. The source has no confirmed formal citation in this card. Citing this repository does not itself grant permission to redistribute the source data or images.
+
 ## Maintenance and contact
 
 Maintained as a research dataset at [rocketrat/bkk-traffy-images](https://huggingface.co/datasets/rocketrat/bkk-traffy-images). Pipeline issues can be documented in the [project repository](https://github.com/MaanAlaulaqi/bkk-traffy-images). No public maintenance schedule, benchmark or dedicated contact address has been established.
